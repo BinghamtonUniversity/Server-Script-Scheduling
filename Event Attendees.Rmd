@@ -1,0 +1,182 @@
+---
+title: "B-Engaged Events Script"
+output: html_document
+date: "2024-10-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(httr)
+library(jsonlite)
+library(tidyr)
+library(lubridate)
+library(XML)
+library(xml2)
+library(tidyverse)
+library(openxlsx)
+```
+```{r}
+event_ends_after <- "2024-08-18"  # Start date: August 24th
+event_starts_before <- "2024-12-14"  # End date: December 3rd
+
+# Define the API URL with updated parameters for the specific date range
+url <- paste0(
+  'https://bengaged.binghamton.edu/rss_events?time_range=past',
+  '&event_ends_after=', event_ends_after,
+  '&event_starts_before=', event_starts_before
+)
+# Define the token for authentication
+token <- 'jhRPhOeOPUlZLxceGVhjgcwvA4btE4EkD58s/ySv4DP+RgbbH6Pdtu3/TuTCuoqDp6x1YYSO/jxvMUBla4wVUxFKTnxdqs8xFJ2taut0wdxSGAue2OoilXKEHTKbJXd+cQ=='
+
+
+```
+
+```{r}
+response = GET(url=url, add_headers('X-CG-API-Secret' = paste(token)))
+```
+
+```{r}
+test <- read_xml(response)
+items <- xml_find_all(test, "//item")
+
+# Initialize an empty list to store data
+data_list <- list()
+
+# Loop through each <item> node
+for (item in items) {
+  # Get all children of the current <item> node
+  children <- xml_children(item)
+  
+  # Create a named list for each item
+  item_data <- list()
+  for (child in children) {
+    element_name <- xml_name(child)  # Get the name of the element
+    element_value <- xml_text(child)  # Get the text content of the element
+    item_data[[element_name]] <- element_value
+  }
+  
+  # Append item data to the list
+  data_list <- append(data_list, list(item_data))
+}
+
+
+df <- bind_rows(data_list) %>% 
+  as_tibble()
+```
+
+```{r}
+event_id = 2265620
+url <- paste0('https://bengaged.binghamton.edu/rss_event_attendees?event_id=', event_id)
+```
+
+```{r}
+response2 = GET(url=url, add_headers('X-CG-API-Secret' = paste(token)))
+```
+
+
+```{r}
+test <- read_xml(response2)
+items <- xml_find_all(test, "//item")
+
+# Initialize an empty list to store data
+data_list <- list()
+
+# Loop through each <item> node
+for (item in items) {
+  # Get all children of the current <item> node
+  children <- xml_children(item)
+  
+  # Create a named list for each item
+  item_data <- list()
+  for (child in children) {
+    element_name <- xml_name(child)  # Get the name of the element
+    element_value <- xml_text(child)  # Get the text content of the element
+    item_data[[element_name]] <- element_value
+  }
+  
+  # Append item data to the list
+  data_list <- append(data_list, list(item_data))
+}
+
+
+event_attendees <- bind_rows(data_list) %>% 
+  as_tibble()
+
+```
+
+```{r}
+# Select the first 5 event IDs
+event_ids <- df$eventId
+
+# Initialize a list to store all attendees' data
+attendees_list <- list()
+
+# Loop through the first 5 event IDs
+for (event_id in event_ids) {
+  # Construct the URL for each event_id
+  url <- paste0('https://bengaged.binghamton.edu/rss_event_attendees?event_id=', event_id)
+  
+  # Fetch the response
+  response <- GET(url = url, add_headers('X-CG-API-Secret' = paste(token)))
+  
+  # Parse the XML response
+  test <- read_xml(response)
+  items <- xml_find_all(test, "//item")
+  
+  # Initialize a temporary list to store data for this event_id
+  data_list <- list()
+  
+  # Loop through each <item> node in the response
+  for (item in items) {
+    # Get all children of the current <item> node
+    children <- xml_children(item)
+    
+    # Create a named list for each item
+    item_data <- list()
+    for (child in children) {
+      element_name <- xml_name(child)  # Get the name of the element
+      element_value <- xml_text(child)  # Get the text content of the element
+      item_data[[element_name]] <- element_value
+    }
+    
+    # Add the current event_id to the data
+    item_data[["event_id"]] <- event_id
+    
+    # Append item data to the list
+    data_list <- append(data_list, list(item_data))
+  }
+  
+  # Combine the data for this event into the attendees_list
+  attendees_list <- append(attendees_list, data_list)
+}
+
+# Combine all attendee data into a single tibble
+event_attendees <- bind_rows(attendees_list) %>% 
+  as_tibble()
+
+# Display the final dataframe
+event_attendees
+```
+
+```{r}
+# Add event titles to the attendees data
+event_attendees <- bind_rows(attendees_list) %>% 
+  as_tibble()
+
+# Merge the event titles from df to the attendees data using event_id
+event_attendees <- event_attendees %>%
+  left_join(df %>% select(eventId, title), by = "eventId")
+
+# Display the final dataframe with event titles
+event_attendees %>% relocate(title)
+
+```
+
+```{r}
+setwd('Z:/Shared SAASI/Matthew/Retention/Input')
+write.xlsx(event_attendees, "Fall24_attendees.xlsx")
+```
+

@@ -1,0 +1,320 @@
+---
+title: "January Events Script"
+output: html_document
+date: "2025-01-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(httr)
+library(jsonlite)
+library(tidyr)
+library(lubridate)
+library(XML)
+library(xml2)
+library(tidyverse)
+library(writexl)
+library(dplyr)
+library(tidyverse)
+library(RODBC)
+library(DBI)
+library(dbplyr)
+library(odbc)
+```
+
+```{r}
+event_ids <- c("2277874", "2277745", 2277915, 2278182)  # Replace with your desired event IDs
+
+# Define the token for authentication
+token <- "jhRPhOeOPUlZLxceGVhjgcwvA4btE4EkD58s/ySv4DP+RgbbH6Pdtu3/TuTCuoqDp6x1YYSO/jxvMUBla4wVUxFKTnxdqs8xFJ2taut0wdxSGAue2OoilXKEHTKbJXd+cQ=="
+
+# Initialize an empty list to store data for all events
+all_data_list <- list()
+
+# Loop through each event ID
+for (event_id in event_ids) {
+  # Construct the API URL for the current event ID
+  url <- paste0(
+    "https://bengaged.binghamton.edu/rss_events",
+    "?event_id=", event_id  # Ensure no extra "&" or characters
+  )
+  
+  # Make the GET request
+  response <- GET(url = url, add_headers("X-CG-API-Secret" = token))
+  
+  # Parse the response as XML
+  if (status_code(response) == 200) {
+    test <- read_xml(response)
+    items <- xml_find_all(test, "//item")
+    
+    # Loop through each <item> node and extract data
+    for (item in items) {
+      # Get all children of the current <item> node
+      children <- xml_children(item)
+      
+      # Create a named list for each item
+      item_data <- list()
+      for (child in children) {
+        element_name <- xml_name(child)  # Get the name of the element
+        element_value <- xml_text(child)  # Get the text content of the element
+        item_data[[element_name]] <- element_value
+      }
+      
+      # Append item data to the master list
+      all_data_list <- append(all_data_list, list(item_data))
+    }
+  } else {
+    cat("Error fetching data for event ID:", event_id, "Status code:", status_code(response), "\n")
+  }
+}
+
+# Combine all event data into a single data frame
+df <- bind_rows(all_data_list) %>% 
+  as_tibble()
+```
+
+
+
+```{r}
+attendees_list <- list()
+
+# Loop through the first 5 event IDs
+for (event_id in event_ids) {
+  # Construct the URL for each event_id
+  url <- paste0('https://bengaged.binghamton.edu/rss_event_attendees?event_id=', event_id)
+  
+  # Fetch the response
+  response <- GET(url = url, add_headers('X-CG-API-Secret' = paste(token)))
+  
+  # Parse the XML response
+  test <- read_xml(response)
+  items <- xml_find_all(test, "//item")
+  
+  # Initialize a temporary list to store data for this event_id
+  data_list <- list()
+  
+  # Loop through each <item> node in the response
+  for (item in items) {
+    # Get all children of the current <item> node
+    children <- xml_children(item)
+    
+    # Create a named list for each item
+    item_data <- list()
+    for (child in children) {
+      element_name <- xml_name(child)  # Get the name of the element
+      element_value <- xml_text(child)  # Get the text content of the element
+      item_data[[element_name]] <- element_value
+    }
+    
+    # Add the current event_id to the data
+    item_data[["event_id"]] <- event_id
+    
+    # Append item data to the list
+    data_list <- append(data_list, list(item_data))
+  }
+  
+  # Combine the data for this event into the attendees_list
+  attendees_list <- append(attendees_list, data_list)
+}
+
+# Combine all attendee data into a single tibble
+event_attendees <- bind_rows(attendees_list) %>% 
+  as_tibble()
+
+# Display the final dataframe
+event_attendees
+```
+
+```{r}
+# Add event titles to the attendees data
+event_attendees <- bind_rows(attendees_list) %>% 
+  as_tibble()
+
+# Merge the event titles from df to the attendees data using event_id
+event_attendees <- event_attendees %>%
+  left_join(df %>% select(eventId, title), by = "eventId")
+
+# Display the final dataframe with event titles
+event_attendees %>% relocate(title)
+
+```
+
+```{r}
+conn = dbConnect(odbc::odbc(), dsn = "ODSPROD", UID = Sys.getenv("ods_userid"), PWD = Sys.getenv("ods_pwd"))
+```
+
+```{r}
+HOUSING <- dbGetQuery(
+  conn,
+  sql("SELECT DISTINCT 
+    t1.ENTITY_UID AS PERSON_UID,
+    t1.STREET_LINE1, 
+    t1.STREET_LINE2, 
+    t1.STREET_LINE3,
+    t1.ADDRESS_TYPE,
+    t1.ADDRESS_TYPE_DESC,
+    t1.ADDRESS_START_DATE,
+    t1.ADDRESS_END_DATE 
+FROM ODSMGR.ADDRESS t1
+LEFT JOIN ODSMGR.STUDENT_BU t2
+ON t1.ENTITY_UID = t2.PERSON_UID
+WHERE t2.ACADEMIC_PERIOD = 202490
+AND t1.ADDRESS_TYPE = 'CA'
+AND t2.PRIMARY_PROGRAM_IND = 'Y'
+AND t2.OFFICIALLY_ENROLLED = 'Y'
+AND (t1.ADDRESS_END_DATE > SYSDATE OR t1.ADDRESS_END_DATE IS NULL)")
+)
+
+RACE <- dbGetQuery(
+  conn, sql( "
+SELECT DISTINCT
+    t1.PERSON_UID,
+    t2.ID_NUMBER,
+    t1.SUNY_RACE_ETHNICITY_CODE,
+    t1.UNDERREPRESENTED_IND,
+    t1.CITIZENSHIP_DESC
+FROM ODSMGR.PERSON_SENSITIVE_IPEDS_BU t1
+LEFT JOIN ODSMGR.STUDENT_BU t2
+ON t1.PERSON_UID = t2.PERSON_UID
+WHERE t2.ACADEMIC_PERIOD = 202490
+AND t2.PRIMARY_PROGRAM_IND = 'Y'
+AND t2.OFFICIALLY_ENROLLED = 'Y'
+"))
+
+DEMOGRAPHICS = RACE %>% left_join(HOUSING, by = "PERSON_UID") %>%
+  mutate(
+    HOUSING_TYPE = if_else(ADDRESS_TYPE == "CA", "On-Campus", "Off-Campus", missing = "Off-Campus"),
+    COMMUNITY = if_else(ADDRESS_TYPE == "CA", STREET_LINE1, "Off-Campus", missing = "Off-Campus"),
+    HALL = if_else(ADDRESS_TYPE == "CA", STREET_LINE2, "Off-Campus", missing = "Off-Campus"),
+    ROOM = if_else(ADDRESS_TYPE == "CA", STREET_LINE3, "Off-Campus", missing = "Off-Campus")
+  ) %>% select(PERSON_UID, ID_NUMBER, SUNY_RACE_ETHNICITY_CODE, UNDERREPRESENTED_IND, CITIZENSHIP_DESC, HOUSING_TYPE, COMMUNITY, HALL, ROOM)
+library(janitor)
+tabyl(event_attendees$title)
+```
+```{r}
+# Step 1: Get all unique event titles
+all_titles <- unique(df$title)
+
+
+wide_data <- event_attendees %>%
+  filter(checkedIn == 1) %>%  # Keep only rows where Checked In is Y
+  mutate(attended = "Y") %>%       # Mark attendance as "Y"
+  select(netId, title, attended) %>%  # Keep only necessary columns
+  distinct() %>%                   # Remove duplicate rows
+  pivot_wider(
+    names_from = title,            # Each event title becomes a column
+    values_from = attended,        # Populate with attendance status
+    values_fill = list(attended = "N")  # Default to "N" for non-attendance
+  )
+
+# Step 6: Merge back with DEMOGRAPHICS to preserve all original columns
+final_table <- DEMOGRAPHICS %>%
+  left_join(wide_data, by = c("ID_NUMBER" = "netId"))   # Add attendance columns to original DEMOGRAPHICS data
+
+# View the final result
+attendance_columns <- setdiff(names(final_table), names(DEMOGRAPHICS))
+final_table[attendance_columns] <- final_table[attendance_columns] %>%
+  mutate(across(everything(), ~ replace_na(.x, "N")))
+
+# Save the dataset to a CSV file
+write.csv(final_table, "final_table.csv", row.names = FALSE)
+
+```
+
+
+```{r}
+file_name <- paste0(
+  "Z:/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/", 
+  event_ends_after, 
+  " to ", 
+  event_starts_before, 
+  ".xlsx"
+)
+
+write_xlsx(event_attendees, file_name)
+```
+
+
+```{r}
+library(shiny)
+library(DT)
+
+# Define the UI
+ui <- fluidPage(
+    titlePanel("Student Attendance Dashboard"),
+    sidebarLayout(
+        sidebarPanel(
+            h4("Filter Options"),
+            selectInput("ethnicity_filter", "Select Ethnicity:", choices = NULL, multiple = TRUE),
+            selectInput("housing_filter", "Select Housing Type:", choices = NULL, multiple = TRUE),
+            selectInput("community_filter", "Select Community:", choices = NULL, multiple = TRUE),
+            selectInput("hall_filter", "Select Hall:", choices = NULL, multiple = TRUE),
+            selectInput("room_filter", "Select Room:", choices = NULL, multiple = TRUE),
+            actionButton("apply_filters", "Apply Filters")
+        ),
+        mainPanel(
+            DTOutput("attendanceTable"),
+            downloadButton("downloadData", "Download Filtered Dataset")
+        )
+    )
+)
+
+# Define the server logic
+server <- function(input, output, session) {
+    # Load the dataset
+    attendance_data <- read.csv("final_table.csv")
+    
+    # Populate filter choices dynamically
+    observe({
+        updateSelectInput(session, "ethnicity_filter", choices = unique(attendance_data$SUNY_RACE_ETHNICITY_CODE))
+        updateSelectInput(session, "housing_filter", choices = unique(attendance_data$HOUSING_TYPE))
+        updateSelectInput(session, "community_filter", choices = unique(attendance_data$COMMUNITY))
+        updateSelectInput(session, "hall_filter", choices = unique(attendance_data$HALL))
+        updateSelectInput(session, "room_filter", choices = unique(attendance_data$ROOM))
+    })
+    
+    # Filtered dataset reactive
+    filtered_data <- reactive({
+        data <- attendance_data
+        if (!is.null(input$ethnicity_filter) && length(input$ethnicity_filter) > 0) {
+            data <- data[data$SUNY_RACE_ETHNICITY_CODE %in% input$ethnicity_filter, ]
+        }
+        if (!is.null(input$housing_filter) && length(input$housing_filter) > 0) {
+            data <- data[data$HOUSING_TYPE %in% input$housing_filter, ]
+        }
+        if (!is.null(input$community_filter) && length(input$community_filter) > 0) {
+            data <- data[data$COMMUNITY %in% input$community_filter, ]
+        }
+        if (!is.null(input$hall_filter) && length(input$hall_filter) > 0) {
+            data <- data[data$HALL %in% input$hall_filter, ]
+        }
+        if (!is.null(input$room_filter) && length(input$room_filter) > 0) {
+            data <- data[data$ROOM %in% input$room_filter, ]
+        }
+        data
+    })
+    
+    # Render the filtered datatable
+    output$attendanceTable <- renderDT({
+        datatable(filtered_data(), options = list(pageLength = 10), rownames = FALSE)
+    })
+    
+    # Downloadable filtered dataset
+    output$downloadData <- downloadHandler(
+        filename = function() {
+            paste("filtered_final_table", Sys.Date(), ".csv", sep = "")
+        },
+        content = function(file) {
+            write.csv(filtered_data(), file, row.names = FALSE)
+        }
+    )
+}
+
+# Run the application
+shinyApp(ui = ui, server = server)
+
+```
+

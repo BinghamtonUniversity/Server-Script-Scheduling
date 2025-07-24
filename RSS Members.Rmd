@@ -1,0 +1,145 @@
+---
+title: "RSS Members"
+output: html_document
+date: "2024-12-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(httr)
+library(jsonlite)
+library(tidyr)
+library(lubridate)
+library(XML)
+library(xml2)
+library(tidyverse)
+library(writexl)
+```
+```{r}
+url = 'https://bengaged.binghamton.edu/rss_groups?include_deleted=1'
+
+token <- 'jhRPhOeOPUlZLxceGVhjgcwvA4btE4EkD58s/ySv4DP+RgbbH6Pdtu3/TuTCuoqDp6x1YYSO/jxvMUBla4wVUxFKTnxdqs8xFJ2taut0wdxSGAue2OoilXKEHTKbJXd+cQ=='
+```
+
+```{r}
+response = GET(url=url, add_headers('X-CG-API-Secret' = paste(token)))
+```
+
+```{r}
+test <- read_xml(response)
+items <- xml_find_all(test, "//item")
+
+# Initialize an empty list to store data
+data_list <- list()
+
+# Loop through each <item> node
+for (item in items) {
+  # Get all children of the current <item> node
+  children <- xml_children(item)
+  
+  # Create a named list for each item
+  item_data <- list()
+  for (child in children) {
+    element_name <- xml_name(child)  # Get the name of the element
+    element_value <- xml_text(child)  # Get the text content of the element
+    item_data[[element_name]] <- element_value
+  }
+  
+  # Append item data to the list
+  data_list <- append(data_list, list(item_data))
+}
+
+
+df <- bind_rows(data_list) %>% 
+  as_tibble()
+```
+
+```{r}
+# Select the first 5 event IDs
+group_ids <- df$groupId
+
+# Initialize a list to store all attendees' data
+members_list <- list()
+
+# Loop through the first 5 event IDs
+for (groupid in group_ids) {
+  # Construct the URL for each event_id
+  url <- paste0('https://bengaged.binghamton.edu/rss_members?group_ids=', groupid)
+  
+  # Fetch the response
+  response <- GET(url = url, add_headers('X-CG-API-Secret' = paste(token)))
+  
+  # Parse the XML response
+  test <- read_xml(response)
+  items <- xml_find_all(test, "//item")
+  
+  # Initialize a temporary list to store data for this event_id
+  data_list <- list()
+  
+  # Loop through each <item> node in the response
+  for (item in items) {
+    # Get all children of the current <item> node
+    children <- xml_children(item)
+    
+    # Create a named list for each item
+    item_data <- list()
+    for (child in children) {
+      element_name <- xml_name(child)  # Get the name of the element
+      element_value <- xml_text(child)  # Get the text content of the element
+      item_data[[element_name]] <- element_value
+    }
+    
+    # Add the current event_id to the data
+    item_data[["group_id"]] <- groupid
+    
+    # Append item data to the list
+    data_list <- append(data_list, list(item_data))
+  }
+  
+  # Combine the data for this event into the attendees_list
+  members_list <- append(members_list, data_list)
+}
+
+df2 = df %>% select(groupId, groupType)
+# Combine all attendee data into a single tibble
+group_members <- bind_rows(members_list) %>% 
+  as_tibble() %>% relocate(groupName)
+group_members2 = group_members %>% left_join(df2, by = 'groupId') %>% relocate(groupName, groupType)
+```
+
+```{r}
+
+file_name <- paste0(
+  "Z:/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Members/Members_dump", 
+  
+  ".xlsx"
+)
+
+write_xlsx(group_members, file_name)
+```
+
+
+```{r}
+file_name <- paste0(
+  "Z:/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Groups/Groups_dump", 
+  
+  ".xlsx"
+)
+
+write_xlsx(df, file_name)
+```
+
+```{r}
+
+file_name <- paste0(
+  "Z:/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Members/Members_dump_with_grouptype", 
+  
+  ".xlsx"
+)
+
+write_xlsx(group_members2, file_name)
+```
+

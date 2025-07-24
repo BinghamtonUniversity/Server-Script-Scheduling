@@ -1,0 +1,155 @@
+---
+title: "TSS Events"
+output: html_document
+date: "2025-02-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(httr)
+library(jsonlite)
+library(tidyr)
+library(lubridate)
+library(XML)
+library(xml2)
+library(tidyverse)
+library(writexl)
+library(dplyr)
+library(tidyverse)
+library(RODBC)
+library(DBI)
+library(dbplyr)
+library(odbc)
+```
+
+```{r}
+group_ids <- c("23510")  # Replace with your desired event IDs
+
+# Define the token for authentication
+token <- Sys.getenv('cg_token')
+
+start_date <- "2024-08-18"
+end_date   <- "2025-05-14"
+
+# Initialize an empty list to store data for all events
+all_data_list <- list()
+
+# Loop through each event ID
+for (group_id in group_ids) {
+  # Construct the API URL for the current event ID
+  url <- paste0(
+    "https://bengaged.binghamton.edu/rss_events?time_range=past",
+    "&event_ends_after=", start_date,
+    "&event_starts_before=", end_date,
+     "&group_ids=", group_id
+  )
+  
+  # Make the GET request
+  response <- GET(url = url, add_headers("X-CG-API-Secret" = token))
+  
+  # Parse the response as XML
+  if (status_code(response) == 200) {
+    test <- read_xml(response)
+    items <- xml_find_all(test, "//item")
+    
+    # Loop through each <item> node and extract data
+    for (item in items) {
+      # Get all children of the current <item> node
+      children <- xml_children(item)
+      
+      # Create a named list for each item
+      item_data <- list()
+      for (child in children) {
+        element_name <- xml_name(child)  # Get the name of the element
+        element_value <- xml_text(child)  # Get the text content of the element
+        item_data[[element_name]] <- element_value
+      }
+      
+      # Append item data to the master list
+      all_data_list <- append(all_data_list, list(item_data))
+    }
+  } else {
+    cat("Error fetching data for event ID:", group_id, "Status code:", status_code(response), "\n")
+  }
+}
+
+# Combine all event data into a single data frame
+df <- bind_rows(all_data_list) %>% 
+  as_tibble()
+```
+
+
+
+```{r}
+attendees_list <- list()
+event_ids = df$eventId
+# Loop through the first 5 event IDs
+for (event_id in event_ids) {
+  # Construct the URL for each event_id
+  url <- paste0('https://bengaged.binghamton.edu/rss_event_attendees?event_id=', event_id)
+  
+  # Fetch the response
+  response <- GET(url = url, add_headers('X-CG-API-Secret' = paste(token)))
+  
+  # Parse the XML response
+  test <- read_xml(response)
+  items <- xml_find_all(test, "//item")
+  
+  # Initialize a temporary list to store data for this event_id
+  data_list <- list()
+  
+  # Loop through each <item> node in the response
+  for (item in items) {
+    # Get all children of the current <item> node
+    children <- xml_children(item)
+    
+    # Create a named list for each item
+    item_data <- list()
+    for (child in children) {
+      element_name <- xml_name(child)  # Get the name of the element
+      element_value <- xml_text(child)  # Get the text content of the element
+      item_data[[element_name]] <- element_value
+    }
+    
+    # Add the current event_id to the data
+    item_data[["event_id"]] <- event_id
+    
+    # Append item data to the list
+    data_list <- append(data_list, list(item_data))
+  }
+  
+  # Combine the data for this event into the attendees_list
+  attendees_list <- append(attendees_list, data_list)
+}
+
+# Combine all attendee data into a single tibble
+event_attendees <- bind_rows(attendees_list) %>% 
+  as_tibble()
+
+# Display the final dataframe
+event_attendees
+```
+
+```{r}
+# Add event titles to the attendees data
+event_attendees <- bind_rows(attendees_list) %>% 
+  as_tibble()
+
+# Merge the event titles from df to the attendees data using event_id
+event_attendees <- event_attendees %>%
+  left_join(df %>% select(eventId, title, eventDate), by = "eventId")
+
+# Display the final dataframe with event titles
+event_attendees %>% relocate(title, eventDate)
+
+```
+
+```{r}
+write.csv(event_attendees, "Z:/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Attendees/Late Nite Event Attendees.csv")
+write.csv(df %>% select(title, eventDate), "Z:/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Attendees/Late Nite Events.csv" )
+```
+
