@@ -9,6 +9,8 @@ library(writexl)
 library(knitr)
 library(gt)
 
+readRenviron("Z:/Shiny Apps/.Renviron.R")
+
 tryCatch({
   
   # --- Config ---
