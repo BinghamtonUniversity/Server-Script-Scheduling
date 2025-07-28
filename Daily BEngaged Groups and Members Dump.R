@@ -1,10 +1,15 @@
 library(httr)
 library(xml2)
 library(tidyverse)
-library(writexl)
+library(lubridate)
 library(blastula)
 library(kableExtra)
-
+library(dplyr)
+library(writexl)
+library(knitr)
+library(gt)
+readRenviron("Z:/Shiny Apps/.Renviron.R")
+Sys.info()
 tryCatch({
   
   # --- CONFIG ---
@@ -78,7 +83,6 @@ tryCatch({
       "</ul>",
       "<p>Files written to:</p><ul>",
       "<li>", out_path_groups, "</li>",
-      "<li>", out_path_members, "</li>",
       "<li>", out_path_members_full, "</li>",
       "</ul>",
       summary_html
