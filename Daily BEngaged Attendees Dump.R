@@ -103,7 +103,7 @@ tryCatch({
   smtp_send(
     email,
     from = "mjacob28@binghamton.edu",
-    to = c("mjacob28@binghamton.edu"),
+    to = c("mjacob28@binghamton.edu","ewalsh@binghamton.edu"),
     subject = paste("✅ B-Engaged Export Success:", Sys.Date()),
     credentials = creds_envvar(
       host = Sys.getenv("SMTP_SERVER"),   # ✅ This gets the actual hostname
@@ -131,7 +131,7 @@ tryCatch({
   smtp_send(
     error_email,
     from = "mjacob28@binghamton.edu",
-    to = c("mjacob28@binghamton.edu"),
+    to = c("mjacob28@binghamton.edu","ewalsh@binghamton.edu"),
     subject = paste("❌ B-Engaged Export Failed:", Sys.Date()),
     credentials = creds_envvar(
       host = Sys.getenv("SMTP_SERVER"),   # ✅ This gets the actual hostname
