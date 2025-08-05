@@ -24,7 +24,17 @@ tryCatch({
   conn <- dbConnect(odbc::odbc(), dsn = "ODSPROD", UID = Sys.getenv("ods_userid"), PWD = Sys.getenv("ods_pwd"))
   
   # ==== 1. Load Fall 2024 PDE Snapshot ====
-  pde <- read_excel("Z:/Shared SAASI/Banner Info/Periodic Data Exports/202490 Fall/Periodic Data Export - Day 45 - 20241029.xlsx") %>%
+  # 1. point at your “Dumps” folder
+  dump_dir <- "Z:/Shared SAASI/Banner Info/Periodic Data Exports/PDE - R Scripts/Dumps"
+  
+  # 2. list all .xlsx files
+  xlsx_files <- list.files(dump_dir, pattern = "\\.xlsx$", full.names = TRUE)
+  
+  # 3. pick the one with the most recent mtime
+  latest_xlsx <- xlsx_files[ which.max(file.info(xlsx_files)$mtime) ]
+  
+  # 4. read it in and clean names
+  pde <- read_excel(latest_xlsx) %>%
     clean_names() %>%
     rename_all(toupper)
   
@@ -198,3 +208,4 @@ WHERE
   )
   
 })
+
