@@ -8,16 +8,15 @@ library(dplyr)
 library(writexl)
 library(knitr)
 library(gt)
-readRenviron("Z:/Shiny Apps/.Renviron.R")
-Sys.info()
 tryCatch({
   
   # --- CONFIG ---
+  readRenviron("//bushare.binghamton.edu/assess/Shiny Apps/.Renviron.R")
   token <- Sys.getenv("cg_token")
   timestamp <- format(Sys.Date(), "%Y-%m-%d")
   
-  out_path_groups <- paste0("Z:/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Daily Groups Dump/Groups_dump_", timestamp, ".csv")
-  out_path_members_full <- paste0("Z:/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Daily Members Dump/Members_dump", timestamp, ".csv")
+  out_path_groups <- paste0("//bushare.binghamton.edu/assess/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Daily Groups Dump/Groups_dump_", timestamp, ".csv")
+  out_path_members_full <- paste0("//bushare.binghamton.edu/assess/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Daily Members Dump/Members_dump", timestamp, ".csv")
   
   # --- GET GROUPS ---
   group_url <- "https://bengaged.binghamton.edu/rss_groups?include_deleted=1"
@@ -95,7 +94,13 @@ tryCatch({
     from = "mjacob28@binghamton.edu",
     to = c("mjacob28@binghamton.edu"),
     subject = paste("✅ Group Member Export Success:", Sys.Date()),
-    credentials = creds_file("Z:/Shared SAASI/Banner Info/Periodic Data Exports/PDE - R Scripts/gmail_creds")
+    credentials = creds_envvar(
+      host = Sys.getenv("SMTP_SERVER"),   # ✅ This gets the actual hostname
+      user = Sys.getenv("SMTP_USER"),
+      pass_envvar = "SMTP_PASS",          # ✅ This stays quoted — it's the name of the env var
+      port = 465,
+      use_ssl = TRUE
+    )
   )
   
 }, error = function(e) {
@@ -114,6 +119,12 @@ tryCatch({
     from = "mjacob28@binghamton.edu",
     to = c("mjacob28@binghamton.edu"),
     subject = paste("❌ Group Member Export Failed:", Sys.Date()),
-    credentials = creds_file("Z:/Shared SAASI/Banner Info/Periodic Data Exports/PDE - R Scripts/gmail_creds")
+    credentials = creds_envvar(
+      host = Sys.getenv("SMTP_SERVER"),   # ✅ This gets the actual hostname
+      user = Sys.getenv("SMTP_USER"),
+      pass_envvar = "SMTP_PASS",          # ✅ This stays quoted — it's the name of the env var
+      port = 465,
+      use_ssl = TRUE
+    )
   )
 })

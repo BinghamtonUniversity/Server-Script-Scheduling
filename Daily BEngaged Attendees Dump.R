@@ -9,13 +9,14 @@ library(writexl)
 library(knitr)
 library(gt)
 
-readRenviron("Z:/Shiny Apps/.Renviron.R")
+readRenviron("//bushare.binghamton.edu/assess/Shiny Apps/.Renviron.R")
 
 tryCatch({
-  
+  readRenviron("//bushare.binghamton.edu/assess/Shiny Apps/.Renviron.R")
   # --- Config ---
   today <- format(Sys.Date(), "%Y-%m-%d")
-  output_path <- paste0("Z:/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Daily Attendees Dump/BEngaged_Event_Attendees_", today, ".csv")
+  events_output_path <- paste0("//bushare.binghamton.edu/assess/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Daily Groups Dump/BEngaged Groups Pull_", today, ".csv")
+  attendance_output_path <- paste0("//bushare.binghamton.edu/assess/Shared SAASI/Data Hub Development/B-Engaged Migration/B-Engaged Dumps/Daily Attendees Dump/BEngaged Attendance Pull_", today, ".csv")
   token <- Sys.getenv("cg_token")  # Must be stored securely in .Renviron
   event_start_cutoff <- "2025-07-01"
   event_end_cutoff <- "2024-12-15"
@@ -73,7 +74,8 @@ tryCatch({
     relocate(title, eventDate, fullDescription, eventLink)
   
   # --- Step 4: Write CSV Output ---
-  write_csv(final_df, output_path)
+  write_csv(final_df, attendance_output_path)
+  write_csv(events_df, events_output_path)
   
   # --- Step 5: Build Summary Table for Email ---
   summary_table <- final_df %>%
@@ -92,7 +94,7 @@ tryCatch({
   email <- compose_email(
     body = html(paste0(
       "<p>✅ B-Engaged attendee export completed successfully on ", Sys.Date(), ".</p>",
-      "<p><strong>Output file:</strong><br>", output_path, "</p>",
+      "<p><strong>Output file:</strong><br>", attendance_output_path, "</p>",
       summary_html
     )),
     footer = "— Automated B-Engaged Script"
@@ -103,7 +105,13 @@ tryCatch({
     from = "mjacob28@binghamton.edu",
     to = c("mjacob28@binghamton.edu"),
     subject = paste("✅ B-Engaged Export Success:", Sys.Date()),
-    credentials = creds_file("Z:/Shared SAASI/Banner Info/Periodic Data Exports/PDE - R Scripts/gmail_creds")
+    credentials = creds_envvar(
+      host = Sys.getenv("SMTP_SERVER"),   # ✅ This gets the actual hostname
+      user = Sys.getenv("SMTP_USER"),
+      pass_envvar = "SMTP_PASS",          # ✅ This stays quoted — it's the name of the env var
+      port = 465,
+      use_ssl = TRUE
+    )
   )
   
 }, error = function(e) {
@@ -113,7 +121,7 @@ tryCatch({
     body = md(paste0(
       "❌ *B-Engaged attendee export failed on ", Sys.Date(), "*.\n\n",
       "**Expected output file:**  \n",
-      output_path, "\n\n",
+      attendance_output_path, "\n\n",
       "**Error message:**\n\n",
       "```\n", e$message, "\n```"
     )),
@@ -125,6 +133,12 @@ tryCatch({
     from = "mjacob28@binghamton.edu",
     to = c("mjacob28@binghamton.edu"),
     subject = paste("❌ B-Engaged Export Failed:", Sys.Date()),
-    credentials = creds_file("Z:/Shared SAASI/Banner Info/Periodic Data Exports/PDE - R Scripts/gmail_creds")
+    credentials = creds_envvar(
+      host = Sys.getenv("SMTP_SERVER"),   # ✅ This gets the actual hostname
+      user = Sys.getenv("SMTP_USER"),
+      pass_envvar = "SMTP_PASS",          # ✅ This stays quoted — it's the name of the env var
+      port = 465,
+      use_ssl = TRUE
+    )
   )
 })
