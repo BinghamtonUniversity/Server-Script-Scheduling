@@ -17,7 +17,7 @@ library(tidygeocoder)
 tryCatch({
   # ==== Setup Paths ====
   today <- format(Sys.Date(), "%Y-%m-%d")
-  output_path <- paste0("Z:/Shared SAASI/Matthew/TSS/Shiny Apps/TSS Students/Temp Data/tss_cleaned_", today, ".csv")
+  output_path <- paste0("//bushare.binghamton.edu/assess/Shared SAASI/Matthew/TSS/Shiny Apps/TSS Students/Temp Data/tss_cleaned_", today, ".csv")
   
   # ==== Connect to ODS ====
   con <- odbcConnect("ODSPROD", uid = Sys.getenv("ods_userid"), pwd = Sys.getenv("ods_pwd"))
@@ -25,7 +25,7 @@ tryCatch({
   
   # ==== 1. Load Fall 2024 PDE Snapshot ====
   # 1. point at your “Dumps” folder
-  dump_dir <- "Z:/Shared SAASI/Banner Info/Periodic Data Exports/PDE - R Scripts/Dumps"
+  dump_dir <- "//bushare.binghamton.edu/assess/Shared SAASI/Banner Info/Periodic Data Exports/PDE - R Scripts/Dumps"
   
   # 2. list all .xlsx files
   xlsx_files <- list.files(dump_dir, pattern = "\\.xlsx$", full.names = TRUE)
