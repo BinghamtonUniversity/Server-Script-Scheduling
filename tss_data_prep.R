@@ -155,15 +155,15 @@ WHERE
     bind_rows()
   
   # Join geocoded data back
-  pde <- geocoded_results
+  pde <- pde %>% left_join((geocoded_results %>% select(PERSON_UID, latitude, longitude)), by = "PERSON_UID")
   
   
   # ==== 6. Write Output ====
   write.csv(pde, output_path, row.names = FALSE)
   
   # ==== 7. Email on Success ====
-  summary_stats <- pde %>% count(PREVIOUS_TRANSFER) %>%
-    rename(`Previous Transfer` = PREVIOUS_TRANSFER, Count = n)
+  summary_stats <- pde %>% count(TRANSFER) %>%
+    rename(`Previous Transfer` = TRANSFER, Count = n)
   
   summary_table <- summary_stats %>%
     kable("html", caption = "Previous Transfer Status") %>%
